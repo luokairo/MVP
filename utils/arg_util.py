@@ -23,8 +23,12 @@ import dist
 
 
 class Args(Tap):
-    data_path: str = '/path/to/imagenet'
+    data_path: str = "/fs/scratch/PAS2473/MM2025/neurpis2025/dataset/ILSVRC/Data/CLS-LOC"
+    caption_file: str = "/fs/scratch/PAS2473/MM2025/neurpis2025/VAR-CLIP/imagenet"
+    synset_file: str = "/fs/scratch/PAS2473/MM2025/neurpis2025/dataset/LOC_synset_mapping.txt"
     exp_name: str = 'text'
+    n_cond_embed = 768
+    strength = 1.0
     
     # VAE
     vfast: int = 0      # torch.compile VAE; =0: not compile; 1: compile with 'reduce-overhead'; 2: compile with 'max-autotune'
@@ -82,7 +86,13 @@ class Args(Tap):
     
     # would be automatically set in runtime
     cmd: str = ' '.join(sys.argv[1:])  # [automatically set; don't specify this]
-    branch: str = subprocess.check_output(f'git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD', shell=True).decode('utf-8').strip() or '[unknown]' # [automatically set; don't specify this]
+    try:
+        branch = subprocess.check_output(
+            'git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD',
+            shell=True
+        ).decode('utf-8').strip() or '[unknown]'
+    except Exception:
+        branch = '[unknown]'
     commit_id: str = subprocess.check_output(f'git rev-parse HEAD', shell=True).decode('utf-8').strip() or '[unknown]'  # [automatically set; don't specify this]
     commit_msg: str = (subprocess.check_output(f'git log -1', shell=True).decode('utf-8').strip().splitlines() or ['[unknown]'])[-1].strip()    # [automatically set; don't specify this]
     acc_mean: float = None      # [automatically set; don't specify this]
