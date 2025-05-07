@@ -72,7 +72,7 @@ class VARTrainer(object):
             text_embedding = self.clip.encode_text(inp_clip)
             
             self.var_wo_ddp.forward
-            logits_BLV, _, _ = self.var_wo_ddp(label_B, x_BLCv_wo_first_l, text_embedding)
+            logits_BLV, _, _ = self.var_wo_ddp(label_B, x_BLCv_wo_first_l)
             L_mean += self.val_loss(logits_BLV.data.view(-1, V), gt_BL.view(-1)) * B
             L_tail += self.val_loss(logits_BLV.data[:, -self.last_l:].reshape(-1, V), gt_BL[:, -self.last_l:].reshape(-1)) * B
             acc_mean += (logits_BLV.data.argmax(dim=-1) == gt_BL).sum() * (100/gt_BL.shape[1])
@@ -116,7 +116,7 @@ class VARTrainer(object):
         
         with self.var_opt.amp_ctx:
             self.var_wo_ddp.forward
-            logits_BLV, img_half, img = self.var(label_B, x_BLCv_wo_first_l, text_embedding)
+            logits_BLV, img_half, img = self.var(label_B, x_BLCv_wo_first_l)
             img_half_resized = F.interpolate(img_half, size=(224, 224), mode="bilinear", align_corners=False)
             img_resized = F.interpolate(img, size=(224, 224), mode="bilinear", align_corners=False)
             img_half_embedding = self.clip.encode_image(img_half_resized)

@@ -129,7 +129,7 @@ class VAR(nn.Module):
             total_outer_tokens += outer_tokens
         
         # 如果总token数大于20，则每个尺度只使用四个角
-        use_only_corners = total_outer_tokens > 20
+        use_only_corners = total_outer_tokens > 28
         self.tokens_per_scale = []
         
         token_num = 0
@@ -342,6 +342,7 @@ class VAR(nn.Module):
     @torch.no_grad()
     def autoregressive_infer_cfg(
         self, B: int, label_B: Optional[Union[int, torch.LongTensor]],
+        text_embedding: Optional[torch.Tensor] = None,
         g_seed: Optional[int] = None, cfg=1.5, top_k=0, top_p=0.0,
         more_smooth=False, control_strength=None,
     ) -> torch.Tensor:   # returns reconstructed image (B, 3, H, W) in [0, 1]
@@ -369,6 +370,11 @@ class VAR(nn.Module):
             label_B = torch.full((B,), fill_value=self.num_classes if label_B < 0 else label_B, device=self.lvl_1L.device)
         
         sos = cond_BD = self.class_emb(torch.cat((label_B, torch.full_like(label_B, fill_value=self.num_classes)), dim=0))
+        
+        # for text-to-image generation, we need to generate a visual prompt
+        if text_embedding is not None:
+            noise = self.noise(torch.tensor(0, device=text_embedding.device)).unsqueeze(0).expand(B, -1).to(text_embedding.dtype)
+            sos = cond_BD = self.cond_proj(torch.cat((text_embedding, noise), dim=0))
         
         # 生成完整的visual prompt token序列 (L,C)
         visual_prompt_tokens = self.create_feature_maps_with_visual_prompt(
@@ -407,7 +413,13 @@ class VAR(nn.Module):
                     stage_idx = i // self.layer_internal
                     if stage_idx < 3:  # 确保不超出范围
                         # 为两个batch (原始和CFG) 都添加prompt
-                        prompt_to_add = prompt_features[stage_idx][:cur_L].unsqueeze(0).expand(2 * B, -1, -1)
+                        prompt_to_add = prompt_features[stage_idx][cur_L-pn*pn:cur_L].unsqueeze(0).expand(2 * B, -1, -1)
+                        print("--------------------------------")
+                        print(f"i-{i}depth-stage-{stage_idx}prompt_to_add.shape")
+                        print(prompt_to_add.shape)
+                        print(type(actual_control_strength))
+                        print(x.shape)
+                        print("--------------------------------")
                         x = x + actual_control_strength * prompt_to_add
                         
             logits_BlV = self.get_logits(x, cond_BD)
@@ -443,7 +455,7 @@ class VAR(nn.Module):
         """
         bg, ed = self.begin_ends[self.prog_si] if self.prog_si >= 0 else (0, self.L)
         B = x_BLCv_wo_first_l.shape[0]
-
+        
         # 生成visual prompt token序列 (B,L,C)
         visual_prompt_tokens = self.create_feature_maps_with_visual_prompt(
             self.patch_nums, self.visual_prompt, batch_size=B
@@ -460,8 +472,9 @@ class VAR(nn.Module):
             sos = sos.unsqueeze(1).expand(B, self.first_l, -1) + self.pos_start.expand(B, self.first_l, -1)
             if text_embedding is not None:
                 indexs = torch.randperm(B)[:int(B*0.1)]
-                noise = self.noise(torch.tensor(0, device=label_B.device)).unsqueeze(0)
+                noise = self.noise(torch.tensor(0, device=label_B.device)).unsqueeze(0).to(text_embedding.dtype)
                 text_embedding[indexs,:] = noise
+                text_embedding = text_embedding.to(self.cond_proj.weight.dtype)
                 text_embedding = self.cond_proj(text_embedding)
                 cond_BD = text_embedding
 

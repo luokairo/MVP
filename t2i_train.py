@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import dist
-from utils import arg_util, misc
+from utils import arg_util_t2i, misc
 from utils.data import build_dataset, build_imagenet_captions
 from utils.data_sampler import DistInfiniteBatchSampler, EvalDistributedSampler
 from utils.misc import auto_resume
@@ -21,7 +21,7 @@ from clip_util import CLIPWrapper
 n_cond_embed = 768
 normalize_clip = True
 
-def build_everything(args: arg_util.Args):
+def build_everything(args: arg_util_t2i.Args):
     # resume
     auto_resume_info, start_ep, start_it, trainer_state, args_state = auto_resume(args, 'ar-ckpt*.pth')
     # create tensorboard logger
@@ -92,7 +92,7 @@ def build_everything(args: arg_util.Args):
     # build models
     from torch.nn.parallel import DistributedDataParallel as DDP
     from models import VAR, VQVAE, build_vae_var
-    from par_trainer import VARTrainer
+    from t2i_trainer import VARTrainer
     from utils.amp_sc import AmpOptimizer
     from utils.lr_control import filter_params
     
@@ -119,7 +119,7 @@ def build_everything(args: arg_util.Args):
     dist.barrier()
     vae_local.load_state_dict(torch.load(vae_ckpt, map_location='cpu'), strict=True)
 
-    # 加载CLIP
+    # load clip
     clip = clip_vit_l14(pretrained=True).cuda()
     for param in clip.parameters():
         param.requires_grad = False
@@ -248,7 +248,7 @@ def build_everything(args: arg_util.Args):
 
 
 def main_training():
-    args: arg_util.Args = arg_util.init_dist_and_get_args()
+    args: arg_util_t2i.Args = arg_util_t2i.init_dist_and_get_args()
     if args.local_debug:
         torch.autograd.set_detect_anomaly(True)
     
@@ -305,9 +305,9 @@ def main_training():
     dist.barrier()
 
 
-def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args, tb_lg: misc.TensorboardLogger, ld_or_itrt, iters_train: int, trainer, ld_val):
+def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util_t2i.Args, tb_lg: misc.TensorboardLogger, ld_or_itrt, iters_train: int, trainer, ld_val):
     # import heavy packages after Dataloader object creation
-    from trainer import VARTrainer
+    from t2i_trainer import VARTrainer
     from utils.lr_control import lr_wd_annealing
     trainer: VARTrainer
     

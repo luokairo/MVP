@@ -11,8 +11,8 @@ import torch
 from torch.utils.data import DataLoader
 
 import dist
-from utils import arg_util, misc
-from utils.data import build_dataset, build_imagenet_captions
+from utils import arg_util_c2i, misc
+from utils.data import build_imagenet_captions
 from utils.data_sampler import DistInfiniteBatchSampler, EvalDistributedSampler
 from utils.misc import auto_resume
 from models.clip import clip_vit_l14
@@ -21,7 +21,7 @@ from clip_util import CLIPWrapper
 n_cond_embed = 768
 normalize_clip = True
 
-def build_everything(args: arg_util.Args):
+def build_everything(args: arg_util_c2i.Args):
     # resume
     auto_resume_info, start_ep, start_it, trainer_state, args_state = auto_resume(args, 'ar-ckpt*.pth')
     # create tensorboard logger
@@ -92,7 +92,7 @@ def build_everything(args: arg_util.Args):
     # build models
     from torch.nn.parallel import DistributedDataParallel as DDP
     from models import VAR, VQVAE, build_vae_var
-    from par_trainer import VARTrainer
+    from c2i_trainer import VARTrainer
     from utils.amp_sc import AmpOptimizer
     from utils.lr_control import filter_params
     
@@ -119,7 +119,7 @@ def build_everything(args: arg_util.Args):
     dist.barrier()
     vae_local.load_state_dict(torch.load(vae_ckpt, map_location='cpu'), strict=True)
 
-    # 加载CLIP
+    # load clip
     clip = clip_vit_l14(pretrained=True).cuda()
     for param in clip.parameters():
         param.requires_grad = False
@@ -248,7 +248,7 @@ def build_everything(args: arg_util.Args):
 
 
 def main_training():
-    args: arg_util.Args = arg_util.init_dist_and_get_args()
+    args: arg_util_c2i.Args = arg_util_c2i.init_dist_and_get_args()
     if args.local_debug:
         torch.autograd.set_detect_anomaly(True)
     
@@ -305,9 +305,9 @@ def main_training():
     dist.barrier()
 
 
-def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args, tb_lg: misc.TensorboardLogger, ld_or_itrt, iters_train: int, trainer, ld_val):
+def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util_c2i.Args, tb_lg: misc.TensorboardLogger, ld_or_itrt, iters_train: int, trainer, ld_val):
     # import heavy packages after Dataloader object creation
-    from trainer import VARTrainer
+    from c2i_trainer import VARTrainer
     from utils.lr_control import lr_wd_annealing
     trainer: VARTrainer
     
@@ -327,7 +327,7 @@ def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args,
     # 记录保存模型的最佳验证指标
     best_val_loss_tail = 999.
     
-    for it, (inp, label, label_name, caption) in me.log_every(start_it, iters_train, ld_or_itrt, 150, header):
+    for it, (inp, label, label_name, caption) in me.log_every(start_it, iters_train, ld_or_itrt, 200, header):
         g_it = ep * iters_train + it
         if it < start_it: continue
         if is_first_ep and it == start_it: warnings.resetwarnings()
@@ -374,7 +374,7 @@ def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args,
             tb_lg.update(head='AR_opt_grad/grad', grad_clip=args.tclip)
             
         # 每4000步保存一次模型，或在最后一个epoch的最后一次迭代保存
-        is_save_step = (g_it + 1) % 400 == 0
+        is_save_step = (g_it + 1) % 250 == 0
         is_last_step = (ep + 1 == args.ep) and (it + 1 == iters_train)
         
         if is_save_step or is_last_step:

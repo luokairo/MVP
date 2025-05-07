@@ -307,7 +307,7 @@ def main_training():
 
 def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args, tb_lg: misc.TensorboardLogger, ld_or_itrt, iters_train: int, trainer, ld_val):
     # import heavy packages after Dataloader object creation
-    from trainer import VARTrainer
+    from par_trainer import VARTrainer
     from utils.lr_control import lr_wd_annealing
     trainer: VARTrainer
     
@@ -327,7 +327,7 @@ def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args,
     # 记录保存模型的最佳验证指标
     best_val_loss_tail = 999.
     
-    for it, (inp, label, label_name, caption) in me.log_every(start_it, iters_train, ld_or_itrt, 150, header):
+    for it, (inp, label, label_name, caption) in me.log_every(start_it, iters_train, ld_or_itrt, 1500, header):
         g_it = ep * iters_train + it
         if it < start_it: continue
         if is_first_ep and it == start_it: warnings.resetwarnings()

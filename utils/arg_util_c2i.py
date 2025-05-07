@@ -106,7 +106,7 @@ class Args(Tap):
     finish_time: str = ''       # [automatically set; don't specify this]
     
     # environment
-    local_out_dir_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'local_output_test2')  # [automatically set; don't specify this]
+    local_out_dir_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'local_output_c2i')  # [automatically set; don't specify this]
     tb_log_dir_path: str = '...tb-...'  # [automatically set; don't specify this]
     log_txt_path: str = '...'           # [automatically set; don't specify this]
     last_ckpt_path: str = '...'         # [automatically set; don't specify this]

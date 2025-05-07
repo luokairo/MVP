@@ -4,15 +4,15 @@
 export CUDA_VISIBLE_DEVICES=0  # 设置使用的GPU
 
 # 单节点训练
-torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/train2.py \
+torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/c2i_train.py \
   --depth=20 \
-  --bs=32 \
+  --bs=104 \
   --ep=1 \
   --fp16=1 \
   --tlr=1e-4 \
   --alng=1e-3 \
   --wpe=0.1 \
-  --strength=1.0 \
+  --control_strength=1.0 \
   --n_cond_embed=768 \
   --data_load_reso=256
 
@@ -25,7 +25,7 @@ torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/train2.py
 #   --tlr=1e-4 \
 #   --alng=1e-3 \
 #   --wpe=0.1 \
-#   --strength=1.0 \
+#   --control_strength=1.0 \
 #   --n_cond_embed=768 \
 #   --data_path=/path/to/your/data \
 #   --caption_file=/path/to/caption/file.json \
@@ -41,7 +41,7 @@ torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/train2.py
 #   --tlr=1e-4 \
 #   --alng=1e-3 \
 #   --wpe=0.1 \
-#   --strength=1.0 \
+#   --control_strength=1.0 \
 #   --n_cond_embed=768 \
 #   --data_path=/path/to/your/data \
 #   --caption_file=/path/to/caption/file.json \

@@ -16,6 +16,7 @@ class CLIPWrapper():
 
     @torch.no_grad()
     def encode_image(self, image):
+        
         embeds = self.clip.encode_image(image)
         if self.normalize:
             embeds /= embeds.norm(dim=-1, keepdim=True)
