@@ -29,6 +29,7 @@ class Args(Tap):
     exp_name: str = 'text'
     n_cond_embed: int = 768
     control_strength: float = 1.0
+    outer_nums: int = 36
     
     # VAE
     vfast: int = 0      # torch.compile VAE; =0: not compile; 1: compile with 'reduce-overhead'; 2: compile with 'max-autotune'
@@ -106,7 +107,7 @@ class Args(Tap):
     finish_time: str = ''       # [automatically set; don't specify this]
     
     # environment
-    local_out_dir_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'local_output_c2i')  # [automatically set; don't specify this]
+    local_out_dir_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'local_output_c2i_d24')  # [automatically set; don't specify this]
     tb_log_dir_path: str = '...tb-...'  # [automatically set; don't specify this]
     log_txt_path: str = '...'           # [automatically set; don't specify this]
     last_ckpt_path: str = '...'         # [automatically set; don't specify this]

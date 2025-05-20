@@ -14,6 +14,7 @@ def build_vae_var(
     num_classes=1000, depth=16, shared_aln=False, attn_l2_norm=True, n_cond_embed=768,
     flash_if_available=True, fused_if_available=True, control_strength=1.0,
     init_adaln=0.5, init_adaln_gamma=1e-5, init_head=0.02, init_std=-1,    # init_std < 0: automated
+    outer_nums=36,
 ) -> Tuple[VQVAE, VAR]:
     heads = depth
     width = depth * 64
@@ -33,6 +34,7 @@ def build_vae_var(
         patch_nums=patch_nums,
         flash_if_available=flash_if_available, fused_if_available=fused_if_available,
         control_strength=control_strength,
+        outer_nums=outer_nums,
     ).to(device)
     var_wo_ddp.init_weights(init_adaln=init_adaln, init_adaln_gamma=init_adaln_gamma, init_head=init_head, init_std=init_std)
     

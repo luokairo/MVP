@@ -4,9 +4,9 @@
 export CUDA_VISIBLE_DEVICES=0  # 设置使用的GPU
 
 # 单节点训练
-torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/c2i_train.py \
-  --depth=20 \
-  --bs=104 \
+torchrun --nproc_per_node=1 --master_port=29502 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/c2i_train.py \
+  --depth=24 \
+  --bs=82 \
   --ep=1 \
   --fp16=1 \
   --tlr=1e-4 \
@@ -14,7 +14,8 @@ torchrun --nproc_per_node=1 /fs/scratch/PAS2473/MM2025/neurpis2025/VAR/c2i_train
   --wpe=0.1 \
   --control_strength=1.0 \
   --n_cond_embed=768 \
-  --data_load_reso=256
+  --data_load_reso=256 \
+  --outer_nums=20
 
 # 多GPU训练示例
 # torchrun --nproc_per_node=4 --nnodes=1 --node_rank=0 --master_addr=localhost --master_port=29500 train2.py \

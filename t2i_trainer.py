@@ -126,7 +126,7 @@ class VARTrainer(object):
             clip_loss_half = clip_contrastive_loss(img_half_embedding, text_half_embedding)
 
             loss = self.train_loss(logits_BLV.view(-1, V), gt_BL.view(-1)).view(B, -1)
-            loss = loss + 0.5 * clip_loss + 0.7 * clip_loss_half
+            loss = loss + 0.2 * clip_loss + 0.3 * clip_loss_half
             if prog_si >= 0:    # in progressive training
                 bg, ed = self.begin_ends[prog_si]
                 assert logits_BLV.shape[1] == gt_BL.shape[1] == ed
@@ -150,7 +150,7 @@ class VARTrainer(object):
                 Ltail = self.val_loss(logits_BLV.data[:, -self.last_l:].reshape(-1, V), gt_BL[:, -self.last_l:].reshape(-1)).item()
                 acc_tail = (pred_BL[:, -self.last_l:] == gt_BL[:, -self.last_l:]).float().mean().item() * 100
             grad_norm = grad_norm.item()
-            metric_lg.update(Lm=Lmean, Lt=Ltail, Accm=acc_mean, Acct=acc_tail, tnm=grad_norm)
+            metric_lg.update(Lm=Lmean, Lt=Ltail, Accm=acc_mean, Acct=acc_tail, tnm=grad_norm, clip_loss=clip_loss.item(), clip_loss_half=clip_loss_half.item())
         
         # log to tensorboard
         if g_it == 0 or (g_it + 1) % 500 == 0:

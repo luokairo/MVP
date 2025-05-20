@@ -1,5 +1,6 @@
 import math
 from functools import partial
+from pkgutil import get_loader
 from typing import Optional, Tuple, Union
 
 import torch
@@ -28,6 +29,7 @@ class VAR(nn.Module):
         patch_nums=(1, 2, 3, 4, 5, 6, 8, 10, 13, 16),   # 10 steps by default
         flash_if_available=True, fused_if_available=True,
         control_strength=1.0,
+        outer_nums=36,
     ):
         super().__init__()
         # 0. hyperparameters
@@ -118,20 +120,6 @@ class VAR(nn.Module):
         self.head = nn.Linear(self.C, self.V)
 
         # 7. visual Prompt
-        # 计算每个尺度外围一圈的token数量
-        outer_tokens_per_level = []
-        total_outer_tokens = 0
-        
-        for pn in self.patch_nums:
-            # 外围一圈的token数量为4*pn-4
-            outer_tokens = 4*pn-4 if pn > 1 else 1
-            outer_tokens_per_level.append(outer_tokens)
-            total_outer_tokens += outer_tokens
-        
-        # 如果总token数大于20，则每个尺度只使用四个角
-        use_only_corners = total_outer_tokens > 28
-        self.tokens_per_scale = []
-        
         token_num = 0
         self.prompt_indices = []  # 存储每个尺度应该在哪些位置添加prompt
         
@@ -141,38 +129,63 @@ class VAR(nn.Module):
             if pn == 1:
                 # 1x1尺度只有一个token
                 level_indices = [0]
-                token_num += 1
-                outer_tokens = 1
-            elif use_only_corners:
-                # 只使用四个角：左上、右上、左下、右下
-                corners = [0, pn-1, pn*(pn-1), pn*pn-1]
-                level_indices = corners
-                token_num += 4
-                outer_tokens = 4
             else:
-                # 使用外围一圈
-                # 上边缘
-                for j in range(pn):
-                    level_indices.append(j)
-                # 右边缘
-                for j in range(1, pn-1):
-                    level_indices.append(j*pn + (pn-1))
-                # 下边缘
-                for j in range(pn-1, -1, -1):
-                    level_indices.append((pn-1)*pn + j)
-                # 左边缘
-                for j in range(pn-2, 0, -1):
-                    level_indices.append(j*pn)
+                # 计算当前尺度外围的token数量
+                perimeter = 4 * pn - 4  # 外围一圈的token数量
                 
-                token_num += len(level_indices)
-                outer_tokens = len(level_indices)
+                if perimeter <= outer_nums:
+                    # 如果外围token数小于等于outer_nums，使用完整外围
+                    # 以4*4为例 pn=4，外围token数为12，outer_nums为12
+                    # 上边缘
+                    for j in range(pn):
+                        level_indices.append(j) # 0,1,2,3
+                    # 右边缘（不包括右上角）
+                    for j in range(1, pn): # 1, 2, 3
+                        level_indices.append(j * pn + (pn - 1)) # 7, 11, 15 
+                    # 下边缘（从右到左，不包括右下角）
+                    for j in range(pn - 2, -1, -1): # 2, 1, 0
+                        level_indices.append((pn - 1) * pn + j) # 14, 13, 12, 
+                    # 左边缘（从下到上，不包括左下角和左上角）
+                    for j in range(pn - 2, 0, -1): # 2, 1
+                        level_indices.append(j * pn) # 8, 4
+                else:
+                    # 如果外围token数大于outer_nums，只在四个角使用L型
+                    # 以5*5为例 pn=5，外围token数为16，outer_nums为12
+                    corner_size = (outer_nums - 4) // 8  # L型的大小 1
+                    # 左上角L型
+                    for j in range(corner_size + 1): # 0, 1 
+                        level_indices.append(j)  # 上边 0, 1
+                    for j in range(1, corner_size + 1): # 1
+                        level_indices.append(j * pn)  # 左边 5
+                    
+                    # 右上角L型
+                    for j in range(pn - corner_size - 1, pn): # 3, 4
+                        level_indices.append(j)  # 上边 3, 4
+                    for j in range(1, corner_size + 1): # 1
+                        level_indices.append(j * pn + (pn - 1))  # 右边 9
+                    
+                    # 左下角L型
+                    for j in range(corner_size + 1): # 0, 1
+                        level_indices.append((pn - 1) * pn + j)  # 下边 20, 21
+                    for j in range(pn - corner_size - 1, pn - 1): # 3
+                        level_indices.append(j * pn)  # 左边 15
+                    
+                    # 右下角L型
+                    for j in range(pn - corner_size - 1, pn): # 3, 4
+                        level_indices.append((pn - 1) * pn + j)  # 下边 23, 24
+                    for j in range(pn - corner_size - 1, pn - 1): # 3
+                        level_indices.append(j * pn + (pn - 1))  # 右边 19
             
+            # 去重并排序
+            level_indices = sorted(list(set(level_indices))) # 0, 1, 5, 3, 4, 9, 20, 21, 15, 23, 24, 19
+            print(level_indices)
+            token_num += len(level_indices)
+            print(len(level_indices))
+            print(f'current token_num: {token_num}')
             self.prompt_indices.append(level_indices)
-            self.tokens_per_scale.append(outer_tokens)
-            
-        print(f"Using {'corner' if use_only_corners else 'outer border'} tokens, total: {token_num}")
-        total_prompt_tokens = token_num
-        self.visual_prompt = nn.Parameter(torch.empty(total_prompt_tokens, self.C))
+        
+        print(f"Total prompt tokens: {token_num}")
+        self.visual_prompt = nn.Parameter(torch.empty(token_num, self.C))
         nn.init.trunc_normal_(self.visual_prompt.data, mean=0, std=init_std)
         
         # 添加prompt控制层和控制强度
@@ -192,6 +205,11 @@ class VAR(nn.Module):
         self.noise = nn.Embedding(1, n_cond_embed)
         nn.init.trunc_normal_(self.noise.weight.data, mean=0, std=init_std)
         self.cond_proj = nn.Linear(n_cond_embed, self.C) 
+        test_BLC = self.create_feature_maps_with_visual_prompt(self.patch_nums, self.visual_prompt)
+        print('--------------------------------')
+        print(test_BLC.size())
+        print('--------------------------------')
+        del test_BLC
 
     def create_feature_maps_with_visual_prompt(self, patch_nums, visual_prompt, batch_size=None):
         """
@@ -210,113 +228,18 @@ class VAR(nn.Module):
         token_idx = 0  # 跟踪当前使用的token索引
         
         for i, pn in enumerate(patch_nums):
-            # 创建全0特征图，现在有通道维度
-            feature_map = torch.zeros((pn, pn, self.C), device=visual_prompt.device)
+            # 创建全0特征图
+            feature_map = torch.zeros((pn*pn, self.C), device=visual_prompt.device)
             
-            # 对于1x1的特殊情况
-            if pn == 1:
-                feature_map[0, 0, :] = visual_prompt[token_idx]
-                token_idx += 1
-                feature_maps.append(feature_map.reshape(-1, self.C))  # 将(1,1,C)转换为(1,C)
-                continue
+            # 获取当前尺度的prompt位置
+            level_indices = self.prompt_indices[i]
+            num_tokens = len(level_indices)
+
+            for j, idx in enumerate(level_indices):
+                feature_map[idx, :] = visual_prompt[token_idx + j]
             
-            # 获取该尺度可用的token数量
-            available_tokens = self.tokens_per_scale[i]
-            
-            # 计算特征图外围的总位置数
-            perimeter = 4*pn-4
-            
-            if available_tokens >= perimeter:
-                # 如果token足够填满整个外围，按顺时针方式填充
-                coords = []
-                # 上边缘
-                for j in range(pn):
-                    coords.append((0, j))
-                # 右边缘（不包括右上角）
-                for j in range(1, pn):
-                    coords.append((j, pn-1))
-                # 下边缘（从右到左，不包括右下角）
-                for j in range(pn-2, -1, -1):
-                    coords.append((pn-1, j))
-                # 左边缘（从下到上，不包括左下角和左上角）
-                for j in range(pn-2, 0, -1):
-                    coords.append((j, 0))
-                    
-                for j in range(len(coords)):
-                    row, col = coords[j]
-                    feature_map[row, col, :] = visual_prompt[token_idx]
-                    token_idx += 1
-            else:
-                # 如果token不足以填满整个外围，集中在四个角上并向外延伸
-                tokens_per_corner = available_tokens // 4
-                remainder = available_tokens % 4
-                
-                # 计算每个角落延伸的长度
-                corner_size = max(1, tokens_per_corner // 2 + 1)  # 至少延伸1个位置
-                
-                # 左上角
-                corner_tokens = tokens_per_corner + (1 if remainder > 0 else 0)
-                tokens_used = 0
-                
-                for k in range(min(corner_size, pn)):
-                    if tokens_used < corner_tokens:
-                        feature_map[0, k, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                for k in range(1, min(corner_size, pn)):
-                    if tokens_used < corner_tokens:
-                        feature_map[k, 0, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                # 右上角
-                corner_tokens = tokens_per_corner + (1 if remainder > 1 else 0)
-                tokens_used = 0
-                
-                for k in range(pn-1, max(pn-1-corner_size, -1), -1):
-                    if tokens_used < corner_tokens:
-                        feature_map[0, k, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                for k in range(1, min(corner_size, pn)):
-                    if tokens_used < corner_tokens:
-                        feature_map[k, pn-1, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                # 左下角
-                corner_tokens = tokens_per_corner + (1 if remainder > 2 else 0)
-                tokens_used = 0
-                
-                for k in range(min(corner_size, pn)):
-                    if tokens_used < corner_tokens:
-                        feature_map[pn-1, k, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                for k in range(pn-2, max(pn-1-corner_size, -1), -1):
-                    if tokens_used < corner_tokens:
-                        feature_map[k, 0, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                # 右下角
-                corner_tokens = tokens_per_corner
-                tokens_used = 0
-                
-                for k in range(pn-1, max(pn-1-corner_size, -1), -1):
-                    if tokens_used < corner_tokens:
-                        feature_map[pn-1, k, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
-                
-                for k in range(pn-2, max(pn-1-corner_size, -1), -1):
-                    if tokens_used < corner_tokens:
-                        feature_map[k, pn-1, :] = visual_prompt[token_idx]
-                        token_idx += 1
-                        tokens_used += 1
+            # 更新token索引
+            token_idx += num_tokens
             
             # 将特征图转换为token序列形式 (ph*pw, C)
             feature_maps.append(feature_map.reshape(-1, self.C))
@@ -326,8 +249,8 @@ class VAR(nn.Module):
         
         # 如果提供了batch_size，则扩展为多批次形式 (B, L, C)
         if batch_size is not None:
-            token_sequence = token_sequence.unsqueeze(0).expand(batch_size, -1, -1)
-            
+            token_sequence = token_sequence.unsqueeze(0).expand(batch_size, -1, -1).clone()
+        
         return token_sequence
         
     
@@ -380,6 +303,8 @@ class VAR(nn.Module):
         visual_prompt_tokens = self.create_feature_maps_with_visual_prompt(
             self.patch_nums, self.visual_prompt
         )
+        if text_embedding is None:
+            visual_prompt_tokens[0, :] = 0
         
         # 处理visual prompt用于各层之间
         prompt_features = []
@@ -414,12 +339,6 @@ class VAR(nn.Module):
                     if stage_idx < 3:  # 确保不超出范围
                         # 为两个batch (原始和CFG) 都添加prompt
                         prompt_to_add = prompt_features[stage_idx][cur_L-pn*pn:cur_L].unsqueeze(0).expand(2 * B, -1, -1)
-                        print("--------------------------------")
-                        print(f"i-{i}depth-stage-{stage_idx}prompt_to_add.shape")
-                        print(prompt_to_add.shape)
-                        print(type(actual_control_strength))
-                        print(x.shape)
-                        print("--------------------------------")
                         x = x + actual_control_strength * prompt_to_add
                         
             logits_BlV = self.get_logits(x, cond_BD)
@@ -443,7 +362,7 @@ class VAR(nn.Module):
                 
                 # 添加下一个尺度的visual prompt
                 next_token_map = next_token_map + visual_prompt_tokens[cur_L:cur_L + self.patch_nums[si+1]**2].unsqueeze(0).expand(2 * B, -1, -1)
-        
+
         for b in self.blocks: b.attn.kv_caching(False)
         return self.vae_proxy[0].fhat_to_img(f_hat).add_(1).mul_(0.5)   # de-normalize, from [-1, 1] to [0, 1]
     
@@ -460,6 +379,9 @@ class VAR(nn.Module):
         visual_prompt_tokens = self.create_feature_maps_with_visual_prompt(
             self.patch_nums, self.visual_prompt, batch_size=B
         )
+        
+        if text_embedding is None:
+            visual_prompt_tokens[:, 0, :] = 0
         
         # 处理visual prompt用于各层之间
         prompt_features = []
@@ -510,6 +432,7 @@ class VAR(nn.Module):
             if i % self.layer_internal == self.layer_internal - 1 and i < self.depth - 1:
                 stage_idx = i // self.layer_internal
                 if stage_idx < 3:  # 确保不超出范围
+
                     x_BLC = x_BLC + self.control_strength * prompt_features[stage_idx][:, :ed, :]
                     
         x_BLC = self.get_logits(x_BLC.float(), cond_BD)
@@ -535,7 +458,7 @@ class VAR(nn.Module):
             f_hat, _ = self.vae_quant_proxy[0].get_next_autoregressive_input(
                 si, len(self.patch_nums), f_hat, h_BChw
             )
-            if si == len(self.patch_nums) // 2:
+            if si == 6:
                 f_hat_half = f_hat
 
             cur_L += pn*pn

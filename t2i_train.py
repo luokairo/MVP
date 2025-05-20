@@ -107,7 +107,8 @@ def build_everything(args: arg_util_t2i.Args):
         num_classes=num_classes, depth=args.depth, shared_aln=args.saln, attn_l2_norm=args.anorm,
         flash_if_available=args.fuse, fused_if_available=args.fuse,
         init_adaln=args.aln, init_adaln_gamma=args.alng, init_head=args.hd, init_std=args.ini,
-        n_cond_embed=args.n_cond_embed, control_strength=args.control_strength,
+        n_cond_embed=args.n_cond_embed, control_strength=args.control_strength, 
+        outer_nums=args.outer_nums,
     )
     
     MODEL_DEPTH = args.depth
@@ -374,7 +375,7 @@ def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util_t2i.A
             tb_lg.update(head='AR_opt_grad/grad', grad_clip=args.tclip)
             
         # 每4000步保存一次模型，或在最后一个epoch的最后一次迭代保存
-        is_save_step = (g_it + 1) % 400 == 0
+        is_save_step = (g_it + 1) % 2000 == 0
         is_last_step = (ep + 1 == args.ep) and (it + 1 == iters_train)
         
         if is_save_step or is_last_step:

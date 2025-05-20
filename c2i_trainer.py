@@ -126,7 +126,7 @@ class VARTrainer(object):
             clip_loss_half = clip_contrastive_loss(img_half_embedding, text_half_embedding)
 
             loss = self.train_loss(logits_BLV.view(-1, V), gt_BL.view(-1)).view(B, -1)
-            loss = loss + 0.5 * clip_loss + 0.7 * clip_loss_half
+            loss = loss + 0.8 * clip_loss + 0.5 * clip_loss_half
             if prog_si >= 0:    # in progressive training
                 bg, ed = self.begin_ends[prog_si]
                 assert logits_BLV.shape[1] == gt_BL.shape[1] == ed
